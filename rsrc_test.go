@@ -14,7 +14,7 @@ import (
 )
 
 func Test_Open(t *testing.T) {
-	file, err := rsrc.Open("testdata/SolarianII")
+	file, err := rsrc.FromPath("testdata/SolarianII")
 	assert.NotNil(t, file)
 	assert.Nil(t, err)
 

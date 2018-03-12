@@ -49,12 +49,8 @@ type Resource struct {
 }
 
 type ResourceFile struct {
-	file            *os.File
+	file            io.ReadSeeker
 	resourcesByType map[string][]Resource
-}
-
-func (rf *ResourceFile) Close() error {
-	return rf.file.Close()
 }
 
 func (rf *ResourceFile) CountResources(resourceType string) int {
@@ -127,11 +123,7 @@ func (rf *ResourceFile) parseResourceMap() error {
 	if err := binary.Read(rf.file, binary.BigEndian, &numberOfTypes); err != nil {
 		return err
 	}
-	numberOfTypes += 1
-
-	//fmt.Printf("resourceTypeListOffset = %v\n", resourceTypeListOffset)
-	//fmt.Printf("resourceNameListOffset = %v\n", resourceNameListOffset)
-	//fmt.Printf("numberOfTypes = %v\n", numberOfTypes)
+	numberOfTypes++
 
 	// Read the resource type list
 
@@ -151,16 +143,12 @@ func (rf *ResourceFile) parseResourceMap() error {
 		if err := binary.Read(rf.file, binary.BigEndian, &numberOfResources); err != nil {
 			return err
 		}
-		numberOfResources += 1
+		numberOfResources++
 
 		var referenceListOffset uint16
 		if err := binary.Read(rf.file, binary.BigEndian, &referenceListOffset); err != nil {
 			return err
 		}
-
-		//fmt.Printf("   resourceType = %s\n", fourCharacterCode(resourceType))
-		//fmt.Printf("   numberOfResources = %v\n", numberOfResources)
-		//fmt.Printf("   referenceListOffset = %v\n", referenceListOffset)
 
 		rf.resourcesByType[fourCharacterCode(resourceType)] = make([]Resource, 0)
 
@@ -173,8 +161,8 @@ func (rf *ResourceFile) parseResourceMap() error {
 				return err
 			}
 
-			var resourceId int16
-			if err := binary.Read(rf.file, binary.BigEndian, &resourceId); err != nil {
+			var resourceID int16
+			if err := binary.Read(rf.file, binary.BigEndian, &resourceID); err != nil {
 				return err
 			}
 
@@ -189,13 +177,9 @@ func (rf *ResourceFile) parseResourceMap() error {
 			}
 			thisResourceDataOffset &= 0x00ffffff
 
-			//fmt.Printf("      resourceId = %v\n", resourceId)
-			//fmt.Printf("      resourceNameOffset = %v\n", resourceNameOffset)
-			//fmt.Printf("      resourceDataOffset = %v\n", resourceDataOffset)
-
 			// Read the name
 
-			var resourceName string = ""
+			var resourceName string
 
 			if resourceNameOffset != -1 {
 				if _, err := rf.file.Seek(int64(resourceMapOffset)+int64(resourceNameListOffset)+int64(resourceNameOffset), 0); err != nil {
@@ -207,15 +191,13 @@ func (rf *ResourceFile) parseResourceMap() error {
 					return err
 				}
 				resourceName = name
-
-				//fmt.Printf("         resourceName = %s\n", resourceName)
 			}
 
 			// We have now fully read one resource
 
 			resource := Resource{
 				Type:       fourCharacterCode(resourceType),
-				ID:         resourceId,
+				ID:         resourceID,
 				Name:       resourceName,
 				dataOffset: int64(resourceDataOffset) + int64(thisResourceDataOffset),
 			}
@@ -227,20 +209,21 @@ func (rf *ResourceFile) parseResourceMap() error {
 	return nil
 }
 
-func Open(path string) (*ResourceFile, error) {
+func New(rs io.ReadSeeker) (*ResourceFile, error) {
+	rf := &ResourceFile{
+		file:            rs,
+		resourcesByType: make(map[string][]Resource),
+	}
+	if err := rf.parseResourceMap(); err != nil {
+		return nil, err
+	}
+	return rf, nil
+}
+
+func FromPath(path string) (*ResourceFile, error) {
 	file, err := os.Open(path + "/..namedfork/rsrc")
 	if err != nil {
 		return nil, err
 	}
-	rf := &ResourceFile{
-		file:            file,
-		resourcesByType: make(map[string][]Resource),
-	}
-
-	if err := rf.parseResourceMap(); err != nil {
-		rf.Close()
-		return nil, err
-	}
-
-	return rf, nil
+	return New(file)
 }
