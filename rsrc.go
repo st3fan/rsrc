@@ -5,40 +5,10 @@
 package rsrc
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 	"os"
 )
-
-func fourCharacterCode(code uint32) string {
-	s := ""
-	s += string(code >> 24 & 0x000000ff)
-	s += string(code >> 16 & 0x000000ff)
-	s += string(code >> 8 & 0x000000ff)
-	s += string(code & 0x000000ff)
-	return s
-}
-
-func readPascalString(r io.Reader) (string, error) {
-	reader := bufio.NewReader(r)
-
-	length, err := reader.ReadByte()
-	if err != nil {
-		return "", err
-	}
-
-	name := ""
-	for i := 0; i < int(length); i++ {
-		c, err := reader.ReadByte()
-		if err != nil {
-			return "", err
-		}
-		name += string(c)
-	}
-
-	return name, nil
-}
 
 type Resource struct {
 	Type       string
@@ -81,6 +51,10 @@ func (rf *ResourceFile) GetResource(resourceType string, resourceIndex int) (Res
 }
 
 func (rf *ResourceFile) parseResourceMap() error {
+	if _, err := rf.file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
 	// Read the header
 
 	var resourceDataOffset uint32
